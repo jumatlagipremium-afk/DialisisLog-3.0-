@@ -1,0 +1,114 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function isBoundedString(val, maxLen) {
+      return val is string && val.size() <= maxLen;
+    }
+
+    function isValidDialysisSession(data) {
+      return data.keys().size() <= 300
+        && (!('id' in data) || data.id == null || isBoundedString(data.id, 128))
+        && (!('patientName' in data) || data.patientName == null || isBoundedString(data.patientName, 300))
+        && (!('bedNumber' in data) || data.bedNumber == null || isBoundedString(data.bedNumber, 64));
+    }
+
+    function isValidShiftReport(data) {
+      return data.keys().size() <= 100
+        && (!('updatedAt' in data) || data.updatedAt == null || isBoundedString(data.updatedAt, 64));
+    }
+
+    function isValidMasterPatient(data) {
+      return data.keys().size() <= 100
+        && (!('id' in data) || data.id == null || isBoundedString(data.id, 128))
+        && (!('patientName' in data) || data.patientName == null || isBoundedString(data.patientName, 300));
+    }
+
+    function isValidMasterNurse(data) {
+      return data.keys().size() <= 100
+        && (!('id' in data) || data.id == null || isBoundedString(data.id, 128))
+        && (!('name' in data) || data.name == null || isBoundedString(data.name, 300));
+    }
+
+    function isValidMasterBed(data) {
+      return data.keys().size() <= 100
+        && (!('id' in data) || data.id == null || isBoundedString(data.id, 128))
+        && (!('bedNumber' in data) || data.bedNumber == null || isBoundedString(data.bedNumber, 64));
+    }
+
+    function isValidNurseLogbook(data) {
+      return data.keys().size() <= 150
+        && (!('nurseName' in data) || data.nurseName == null || isBoundedString(data.nurseName, 300))
+        && (!('managedPatients' in data) || data.managedPatients == null || data.managedPatients is list);
+    }
+
+    function isValidVerificationRegistry(data) {
+      return data.keys().size() <= 100
+        && (!('entries' in data) || data.entries == null || data.entries is list)
+        && (!('updatedAt' in data) || data.updatedAt == null || isBoundedString(data.updatedAt, 64));
+    }
+
+    // Dialysis sessions collection (asuhan pasien hemodialisa perawat pelaksana & PJ shift)
+    match /dialysis_sessions/{sessionId} {
+      allow read: if true;
+      allow create, update: if isValidId(sessionId) && isValidDialysisSession(incoming());
+      allow delete: if isValidId(sessionId);
+    }
+
+    // Shift reports and operational SBAR
+    match /shift_reports/{reportId} {
+      allow read: if true;
+      allow create, update: if isValidId(reportId) && isValidShiftReport(incoming());
+      allow delete: if isValidId(reportId);
+    }
+
+    // Master data: Patients
+    match /master_patients/{patientId} {
+      allow read: if true;
+      allow create, update: if isValidId(patientId) && isValidMasterPatient(incoming());
+      allow delete: if isValidId(patientId);
+    }
+
+    // Master data: Nurses (required pre-login for NIP credential lookup across devices)
+    match /master_nurses/{nurseId} {
+      allow read: if true;
+      allow create, update: if isValidId(nurseId) && isValidMasterNurse(incoming());
+      allow delete: if isValidId(nurseId);
+    }
+
+    // Master data: Beds & Machines
+    match /master_beds/{bedId} {
+      allow read: if true;
+      allow create, update: if isValidId(bedId) && isValidMasterBed(incoming());
+      allow delete: if isValidId(bedId);
+    }
+
+    // Individual nurse logbook state (patients managed, checklist statuses, TTV clinical data)
+    match /nurse_logbooks/{nurseKey} {
+      allow read: if true;
+      allow create, update: if isValidId(nurseKey) && isValidNurseLogbook(incoming());
+      allow delete: if isValidId(nurseKey);
+    }
+
+    // Live verification registry for PJ Shift & KaRu
+    match /verification_registry/{regId} {
+      allow read: if true;
+      allow create, update: if isValidId(regId) && isValidVerificationRegistry(incoming());
+      allow delete: if isValidId(regId);
+    }
+
+    // Connection health check document
+    match /test/{docId} {
+      allow read: if true;
+    }
+  }
+}
